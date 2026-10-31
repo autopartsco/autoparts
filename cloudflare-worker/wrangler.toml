@@ -1,0 +1,4 @@
+name = "autoparts-catalog-save"
+main = "src/index.js"
+compatibility_date = "2026-10-30"
+workers_dev = true
