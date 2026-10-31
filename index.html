@@ -544,5 +544,58 @@ html,body{max-width:100%;overflow-x:hidden}
 #isolatedPage .brand img{width:52px;height:31px}
 #isolatedPage .brand span{font-size:14px}
 }
-</style></body>
+</style><style>
+.account-modal{position:fixed;inset:0;z-index:1000;display:none;align-items:center;justify-content:center;padding:18px;background:rgba(12,14,16,.62)}
+.account-modal.open{display:flex}
+.account-card{position:relative;width:min(100%,420px);padding:28px;background:#fff;border-radius:10px;box-shadow:0 24px 70px #0004}
+.account-card h2{margin:0 0 8px;font:800 24px Nunito,sans-serif}
+.account-card p{margin:0 0 20px;color:#666;font-size:13px;line-height:1.5}
+.account-close{position:absolute;top:12px;right:12px;width:36px;height:36px;border:0;border-radius:50%;background:#f1f1f1;font-size:21px}
+.account-form{display:grid;gap:13px}
+.account-form label{display:grid;gap:6px;font-size:12px;font-weight:700;color:#333}
+.account-form input{width:100%;height:44px;padding:10px 12px;border:1px solid #d7d7d7;border-radius:5px}
+.account-form button,.account-success button{width:100%;min-height:44px}
+.account-message{min-height:19px;color:#b4232e;font-size:12px}
+.account-success{padding:14px;border-radius:6px;background:#f4f7f4;color:#285b34;font-size:13px;line-height:1.5}
+.account-success button{margin-top:16px}
+@media(max-width:480px){.account-card{padding:24px 18px}.account-card h2{font-size:21px}}
+</style>
+<script>
+(()=> {
+  const accountButton=document.querySelector('.nav-actions button[aria-label="Cuenta"]');
+  if(!accountButton||document.getElementById('accountModal'))return;
+  // Acceso básico solicitado: estas credenciales quedan visibles en el código público.
+  const ACCOUNT_EMAIL='jvbustos227@gmail.com';
+  const ACCOUNT_PASSWORD='3197677033';
+  const modal=document.createElement('div');
+  modal.id='accountModal';
+  modal.className='account-modal';
+  modal.setAttribute('aria-hidden','true');
+  modal.innerHTML='<section class="account-card" role="dialog" aria-modal="true" aria-labelledby="accountTitle"><button class="account-close" type="button" aria-label="Cerrar">×</button><h2 id="accountTitle">Mi cuenta</h2><p>Inicia sesión para continuar.</p><div class="account-content"></div></section>';
+  document.body.appendChild(modal);
+  const content=modal.querySelector('.account-content'),title=modal.querySelector('#accountTitle'),close=()=>{modal.classList.remove('open');modal.setAttribute('aria-hidden','true')};
+  const signedIn=()=>sessionStorage.getItem('autopartsBasicSession')==='active';
+  const render=()=>{
+    if(signedIn()){
+      title.textContent='Sesión iniciada';
+      content.innerHTML='<div class="account-success">Has iniciado sesión con tu cuenta AUTO PARTS.</div><button class="btn btn-red" type="button" data-signout>Cerrar sesión</button>';
+      content.querySelector('[data-signout]').addEventListener('click',()=>{sessionStorage.removeItem('autopartsBasicSession');render()});
+      return;
+    }
+    title.textContent='Mi cuenta';
+    content.innerHTML='<form class="account-form"><label>Correo electrónico<input name="email" type="email" autocomplete="username" required></label><label>Contraseña<input name="password" type="password" autocomplete="current-password" required></label><div class="account-message" role="status" aria-live="polite"></div><button class="btn btn-red" type="submit">Iniciar sesión</button></form>';
+    content.querySelector('form').addEventListener('submit',event=>{
+      event.preventDefault();
+      const form=event.currentTarget,email=form.elements.email.value.trim().toLowerCase(),password=form.elements.password.value,message=form.querySelector('.account-message');
+      if(email===ACCOUNT_EMAIL&&password===ACCOUNT_PASSWORD){sessionStorage.setItem('autopartsBasicSession','active');render()}
+      else message.textContent='El correo o la contraseña no coinciden.';
+    });
+  };
+  accountButton.addEventListener('click',()=>{render();modal.classList.add('open');modal.setAttribute('aria-hidden','false');setTimeout(()=>content.querySelector('input')?.focus(),0)});
+  modal.querySelector('.account-close').addEventListener('click',close);
+  modal.addEventListener('click',event=>{if(event.target===modal)close()});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&modal.classList.contains('open'))close()});
+})();
+</script>
+</body>
 </html>
