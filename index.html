@@ -579,7 +579,7 @@ html,body{max-width:100%;overflow-x:hidden}
     if(signedIn()){
       title.textContent='Sesión iniciada';
       content.innerHTML='<div class="account-success">Has iniciado sesión con tu cuenta AUTO PARTS.</div><button class="btn btn-red" type="button" data-signout>Cerrar sesión</button>';
-      content.querySelector('[data-signout]').addEventListener('click',()=>{localStorage.removeItem('autopartsBasicSession');render()});
+      content.querySelector('[data-signout]').addEventListener('click',()=>{localStorage.removeItem('autopartsBasicSession');localStorage.removeItem('autopartsCatalogWorkerKey');render()});
       return;
     }
     title.textContent='Mi cuenta';
@@ -624,22 +624,34 @@ html,body{max-width:100%;overflow-x:hidden}
 </style>
 <script>
 (()=>{
-  if(localStorage.getItem('autopartsBasicSession')!=='active')return;
   const route=new URLSearchParams(location.search);
   if(!route.has('pagina')&&location.hash.length>1)for(const [key,value] of new URLSearchParams(location.hash.slice(1)))route.set(key,value);
   if(route.get('pagina')!=='vehiculo')return;
+  const isCatalogAdmin=localStorage.getItem('autopartsBasicSession')==='active';
   const make=route.get('marca')||'',model=route.get('modelo')||'',year=route.get('anio')||'',host=document.querySelector('#isolatedPage #vehicleProductGrid'),layout=host?.closest('.vehicle-catalog-layout');
   if(!host||!layout)return;
   const storageKey='autopartsCatalogEditsV1',scope=[make,model,year].map(v=>encodeURIComponent(v.toLowerCase())).join('|')+'|',money=new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0});
   const readEdits=()=>{try{return JSON.parse(localStorage.getItem(storageKey)||'{}')}catch{return{}}};
-  let edits=readEdits(),editing=false,activeCard=null;
+  let edits=readEdits(),editing=false,activeCard=null,saveQueue=Promise.resolve();
   const editKey=card=>scope+(card.dataset.sku||'').replace(/-(ORIGINAL|PREMIUM|ECONOMICA)$/,'');
   const priceKey=radio=>String(radio.value||'').toLowerCase();
-  const saveEdits=()=>localStorage.setItem(storageKey,JSON.stringify(edits));
+  const saveEdits=()=>{
+    localStorage.setItem(storageKey,JSON.stringify(edits));
+    const status=toolbar?.querySelector('[data-save-status]'),endpoint=localStorage.getItem('autopartsCatalogWorkerUrl'),key=localStorage.getItem('autopartsCatalogWorkerKey');
+    if(!endpoint||!key){if(status)status.textContent='Guardado local. Configura el Worker para sincronizar con GitHub.';return Promise.resolve()}
+    const body=JSON.stringify({edits});
+    saveQueue=saveQueue.catch(()=>{}).then(async()=>{
+      if(status)status.textContent='Guardando cambios en GitHub…';
+      const response=await fetch(endpoint,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},body});
+      if(!response.ok)throw new Error('Worker respondió '+response.status);
+      if(status)status.textContent='Cambios guardados en GitHub.';
+    }).catch(error=>{if(status)status.textContent='Guardado local; falló la sincronización. Revisa la URL y la clave del Worker.';console.error('No se pudieron sincronizar los cambios del catálogo.',error)});
+    return saveQueue;
+  };
   const toolbar=document.createElement('div');
   toolbar.className='catalog-admin-toolbar';
-  toolbar.innerHTML='<strong>Edición de catálogo · '+make+' '+model+' '+year+'</strong><button type="button" class="primary" data-toggle-edit>Activar edición</button><button type="button" data-export>Exportar cambios</button><button type="button" data-import>Importar cambios</button><input type="file" accept="application/json,.json" hidden><small>Los cambios se guardan en este navegador. Exporta una copia para conservarlos o pasarlos a otro dispositivo.</small>';
-  layout.parentNode.insertBefore(toolbar,layout);
+  toolbar.innerHTML='<strong>Edición de catálogo · '+make+' '+model+' '+year+'</strong><button type="button" data-configure>Configurar guardado GitHub</button><button type="button" class="primary" data-toggle-edit>Activar edición</button><button type="button" data-export>Exportar cambios</button><button type="button" data-import>Importar cambios</button><input type="file" accept="application/json,.json" hidden><small data-save-status>Guardado local. Configura el Worker para sincronizar con GitHub.</small>';
+  if(isCatalogAdmin)layout.parentNode.insertBefore(toolbar,layout);
   const modal=document.createElement('div');
   modal.className='catalog-edit-modal';
   modal.innerHTML='<section class="catalog-edit-panel" role="dialog" aria-modal="true" aria-labelledby="catalogEditTitle"><button type="button" class="catalog-edit-close" aria-label="Cerrar">×</button><h2 id="catalogEditTitle">Editar repuesto</h2><p>Los cambios aplican a '+make+' '+model+' '+year+' en este navegador.</p><form class="catalog-edit-form"><label>Nombre del repuesto<input name="name" required maxlength="100"></label><label>Imagen (URL https o ruta assets/)<input name="image" type="text" inputmode="url" placeholder="https://… o assets/imagen.jpg"></label><label class="wide">Descripción<textarea name="description" maxlength="600"></textarea></label><label>Precio original / OE<input name="original" type="number" min="0" step="1000"></label><label>Precio premium<input name="premium" type="number" min="0" step="1000"></label><label>Precio económico<input name="economica" type="number" min="0" step="1000"></label><div class="catalog-edit-status" role="status" aria-live="polite"></div><div class="catalog-edit-actions"><button type="submit" class="btn btn-red">Guardar cambios</button><button type="button" class="btn" data-reset>Restablecer</button></div></form></section>';
@@ -665,6 +677,15 @@ html,body{max-width:100%;overflow-x:hidden}
     if(edits[key])applyValues(card,edits[key]);
     const button=document.createElement('button');button.type='button';button.className='catalog-edit-card';button.textContent='Editar este repuesto';button.addEventListener('click',()=>openEditor(card));card.querySelector('.product-info').appendChild(button);
   });
+  if(isCatalogAdmin&&localStorage.getItem('autopartsCatalogWorkerUrl')&&localStorage.getItem('autopartsCatalogWorkerKey')){
+    const editToggle=toolbar.querySelector('[data-toggle-edit]'),syncStatus=toolbar.querySelector('[data-save-status]');
+    editToggle.disabled=true;syncStatus.textContent='Sincronizando cambios actuales desde GitHub…';
+    fetch(localStorage.getItem('autopartsCatalogWorkerUrl'),{headers:{'Authorization':'Bearer '+localStorage.getItem('autopartsCatalogWorkerKey')}})
+      .then(response=>{if(!response.ok)throw new Error('Worker respondió '+response.status);return response.json()})
+      .then(remote=>{edits={...(remote.edits||{}),...edits};localStorage.setItem(storageKey,JSON.stringify(edits));host.querySelectorAll('.vehicle-system-card').forEach(card=>{const value=edits[editKey(card)];if(value)applyValues(card,value)});syncStatus.textContent='Catálogo sincronizado con GitHub.'})
+      .catch(error=>{syncStatus.textContent='No se pudo leer GitHub; los cambios locales siguen disponibles.';console.error('No se pudo cargar el catálogo desde GitHub.',error)})
+      .finally(()=>{editToggle.disabled=false});
+  }
   function openEditor(card){
     activeCard=card;const value=currentValues(card);
     form.elements.name.value=value.name;form.elements.description.value=value.description;form.elements.image.value=/^https:\/\//i.test(value.image)?value.image:'';
@@ -672,6 +693,24 @@ html,body{max-width:100%;overflow-x:hidden}
     form.querySelector('.catalog-edit-status').textContent='';
     modal.classList.add('open');form.elements.name.focus();
   }
+  toolbar.querySelector('[data-configure]').addEventListener('click',async()=>{
+    const currentEndpoint=localStorage.getItem('autopartsCatalogWorkerUrl')||'',endpoint=prompt('Pega la URL HTTPS del Cloudflare Worker desplegado:',currentEndpoint);
+    if(endpoint===null)return;
+    const normalizedEndpoint=endpoint.trim().replace(/[/]+$/,'');
+    if(!normalizedEndpoint.startsWith('https://')){alert('La URL debe comenzar con https://');return}
+    const key=prompt('Pega la clave privada EDITOR_KEY configurada en el Worker:');
+    if(key===null||!key.trim())return;
+    localStorage.setItem('autopartsCatalogWorkerUrl',normalizedEndpoint);localStorage.setItem('autopartsCatalogWorkerKey',key.trim());
+    const status=toolbar.querySelector('[data-save-status]');status.textContent='Cargando ediciones guardadas en GitHub…';
+    try{
+      const response=await fetch(normalizedEndpoint,{headers:{'Authorization':'Bearer '+key.trim()}});
+      if(!response.ok)throw new Error('Worker respondió '+response.status);
+      const remote=await response.json();
+      edits={...(remote.edits||{}),...edits};localStorage.setItem(storageKey,JSON.stringify(edits));
+      host.querySelectorAll('.vehicle-system-card').forEach(card=>{const value=edits[editKey(card)];if(value)applyValues(card,value)});
+      await saveEdits();
+    }catch(error){status.textContent='No se conectó el Worker. Verifica que esté desplegado y que la clave coincida.';console.error('Error al conectar el guardado de GitHub.',error)}
+  });
   toolbar.querySelector('[data-toggle-edit]').addEventListener('click',event=>{
     editing=!editing;toolbar.dataset.editing=String(editing);event.currentTarget.textContent=editing?'Terminar edición':'Activar edición';
   });
@@ -700,6 +739,36 @@ html,body{max-width:100%;overflow-x:hidden}
   modal.addEventListener('click',event=>{if(event.target===modal)closeModal()});
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&modal.classList.contains('open'))closeModal()});
   host.addEventListener('change',event=>{if(event.target.matches('.vehicle-tier input[type=radio]'))updateWhatsApp(event.target.closest('.vehicle-system-card'))});
+})();
+</script>
+<script>
+(()=>{
+  const route=new URLSearchParams(location.search);
+  if(!route.has('pagina')&&location.hash.length>1)for(const [key,value] of new URLSearchParams(location.hash.slice(1)))route.set(key,value);
+  if(route.get('pagina')!=='vehiculo')return;
+  const make=route.get('marca')||'',model=route.get('modelo')||'',year=route.get('anio')||'',host=document.querySelector('#isolatedPage #vehicleProductGrid');
+  if(!host)return;
+  const scope=[make,model,year].map(value=>encodeURIComponent(value.toLowerCase())).join('|')+'|',storeKey='autopartsCatalogEditsV1',money=new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0});
+  const safeRead=()=>{try{return JSON.parse(localStorage.getItem(storeKey)||'{}')}catch{return{}}};
+  const apply=(card,value)=>{
+    if(!value||typeof value!=='object')return;
+    const title=card.querySelector('h3'),description=card.querySelector('.vehicle-product-desc'),image=card.querySelector('.product-image img');
+    if(value.name&&title)title.textContent=value.name;
+    if(value.description&&description)description.textContent=value.description;
+    if(value.image&&image&&/^(https:\/\/|assets\/)/i.test(value.image)){image.src=value.image;image.alt='Imagen de '+(value.name||title?.textContent||'repuesto')}
+    for(const [key,amount] of Object.entries(value.prices||{})){const radio=card.querySelector('.vehicle-tier input[value="'+key+'"]');if(radio&&Number.isFinite(Number(amount))&&Number(amount)>=0){radio.dataset.price=String(Number(amount));radio.closest('.vehicle-tier').querySelector('em').textContent=money.format(Number(amount))}}
+    const selected=card.querySelector('.vehicle-tier input:checked'),price=card.querySelector('.price');
+    if(selected&&price){price.textContent=money.format(Number(selected.dataset.price||0));card.dataset.price=selected.dataset.price}
+  };
+  const mergeAndApply=remote=>{
+    const local=safeRead(),all={...remote,...local};
+    host.querySelectorAll('.vehicle-system-card').forEach(card=>{
+      const sku=(card.dataset.sku||'').replace(/-(ORIGINAL|PREMIUM|ECONOMICA)$/,''),key=scope+sku;
+      if(all[key])apply(card,all[key]);
+    });
+  };
+  mergeAndApply({});
+  fetch('./catalog-edits.json?rev='+Date.now(),{cache:'no-store'}).then(response=>response.ok?response.json():{}).then(remote=>mergeAndApply(remote)).catch(()=>{});
 })();
 </script>
 </body>
