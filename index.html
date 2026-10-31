@@ -574,12 +574,12 @@ html,body{max-width:100%;overflow-x:hidden}
   modal.innerHTML='<section class="account-card" role="dialog" aria-modal="true" aria-labelledby="accountTitle"><button class="account-close" type="button" aria-label="Cerrar">×</button><h2 id="accountTitle">Mi cuenta</h2><p>Inicia sesión para continuar.</p><div class="account-content"></div></section>';
   document.body.appendChild(modal);
   const content=modal.querySelector('.account-content'),title=modal.querySelector('#accountTitle'),close=()=>{modal.classList.remove('open');modal.setAttribute('aria-hidden','true')};
-  const signedIn=()=>sessionStorage.getItem('autopartsBasicSession')==='active';
+  const signedIn=()=>localStorage.getItem('autopartsBasicSession')==='active';
   const render=()=>{
     if(signedIn()){
       title.textContent='Sesión iniciada';
       content.innerHTML='<div class="account-success">Has iniciado sesión con tu cuenta AUTO PARTS.</div><button class="btn btn-red" type="button" data-signout>Cerrar sesión</button>';
-      content.querySelector('[data-signout]').addEventListener('click',()=>{sessionStorage.removeItem('autopartsBasicSession');render()});
+      content.querySelector('[data-signout]').addEventListener('click',()=>{localStorage.removeItem('autopartsBasicSession');render()});
       return;
     }
     title.textContent='Mi cuenta';
@@ -587,7 +587,7 @@ html,body{max-width:100%;overflow-x:hidden}
     content.querySelector('form').addEventListener('submit',event=>{
       event.preventDefault();
       const form=event.currentTarget,email=form.elements.email.value.trim().toLowerCase(),password=form.elements.password.value,message=form.querySelector('.account-message');
-      if(email===ACCOUNT_EMAIL&&password===ACCOUNT_PASSWORD){sessionStorage.setItem('autopartsBasicSession','active');render()}
+      if(email===ACCOUNT_EMAIL&&password===ACCOUNT_PASSWORD){localStorage.setItem('autopartsBasicSession','active');render()}
       else message.textContent='El correo o la contraseña no coinciden.';
     });
   };
@@ -595,6 +595,111 @@ html,body{max-width:100%;overflow-x:hidden}
   modal.querySelector('.account-close').addEventListener('click',close);
   modal.addEventListener('click',event=>{if(event.target===modal)close()});
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&modal.classList.contains('open'))close()});
+})();
+</script>
+<style>
+.catalog-admin-toolbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:0 0 15px;padding:12px 14px;border:1px solid #e0e1e3;border-left:4px solid #e51d2a;border-radius:7px;background:#fff;box-shadow:0 5px 16px #1616160a}
+.catalog-admin-toolbar strong{margin-right:auto;font-size:12px}
+.catalog-admin-toolbar small{flex-basis:100%;color:#777;font-size:10px}
+.catalog-admin-toolbar button,.catalog-edit-card{min-height:36px;border:1px solid #d6d8db;border-radius:5px;background:#fff;padding:8px 11px;color:#222;font-weight:700;font-size:11px}
+.catalog-admin-toolbar button:hover,.catalog-edit-card:hover{border-color:#e51d2a}
+.catalog-admin-toolbar button.primary,.catalog-edit-card{background:#e51d2a;border-color:#e51d2a;color:#fff}
+.catalog-edit-card{display:none;width:100%;margin-top:10px}
+.catalog-admin-toolbar[data-editing="true"]~.vehicle-catalog-layout .catalog-edit-card{display:block}
+.catalog-edit-modal{position:fixed;inset:0;z-index:1200;display:none;align-items:center;justify-content:center;padding:15px;background:#101010a8}
+.catalog-edit-modal.open{display:flex}
+.catalog-edit-panel{position:relative;width:min(100%,560px);max-height:calc(100vh - 30px);overflow:auto;padding:24px;background:white;border-radius:9px;box-shadow:0 22px 70px #0005}
+.catalog-edit-panel h2{margin:0 40px 7px 0;font:800 21px Nunito,sans-serif}
+.catalog-edit-panel p{margin:0 0 16px;color:#777;font-size:11px;line-height:1.5}
+.catalog-edit-close{position:absolute;top:13px;right:13px;width:34px;height:34px;border:0;border-radius:50%;background:#eee;font-size:20px}
+.catalog-edit-form{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.catalog-edit-form label{display:grid;gap:5px;font-size:11px;font-weight:800;color:#333}
+.catalog-edit-form input,.catalog-edit-form textarea{width:100%;min-width:0;min-height:40px;padding:9px;border:1px solid #d7d7d7;border-radius:4px;font:400 12px 'Nunito Sans',sans-serif}
+.catalog-edit-form textarea{min-height:82px;resize:vertical}
+.catalog-edit-form .wide{grid-column:1/-1}
+.catalog-edit-actions{display:flex;gap:8px;grid-column:1/-1;margin-top:4px}
+.catalog-edit-actions button{flex:1;min-height:42px}
+.catalog-edit-status{grid-column:1/-1;min-height:17px;color:#27703c;font-size:11px}
+@media(max-width:560px){.catalog-admin-toolbar{gap:7px;padding:10px}.catalog-admin-toolbar strong{flex-basis:100%}.catalog-admin-toolbar button{flex:1}.catalog-edit-panel{padding:21px 15px}.catalog-edit-form{grid-template-columns:1fr}.catalog-edit-form .wide,.catalog-edit-actions,.catalog-edit-status{grid-column:1}.catalog-edit-actions{flex-wrap:wrap}}
+</style>
+<script>
+(()=>{
+  if(localStorage.getItem('autopartsBasicSession')!=='active')return;
+  const route=new URLSearchParams(location.search);
+  if(!route.has('pagina')&&location.hash.length>1)for(const [key,value] of new URLSearchParams(location.hash.slice(1)))route.set(key,value);
+  if(route.get('pagina')!=='vehiculo')return;
+  const make=route.get('marca')||'',model=route.get('modelo')||'',year=route.get('anio')||'',host=document.querySelector('#isolatedPage #vehicleProductGrid'),layout=host?.closest('.vehicle-catalog-layout');
+  if(!host||!layout)return;
+  const storageKey='autopartsCatalogEditsV1',scope=[make,model,year].map(v=>encodeURIComponent(v.toLowerCase())).join('|')+'|',money=new Intl.NumberFormat('es-CO',{style:'currency',currency:'COP',maximumFractionDigits:0});
+  const readEdits=()=>{try{return JSON.parse(localStorage.getItem(storageKey)||'{}')}catch{return{}}};
+  let edits=readEdits(),editing=false,activeCard=null;
+  const editKey=card=>scope+(card.dataset.sku||'').replace(/-(ORIGINAL|PREMIUM|ECONOMICA)$/,'');
+  const priceKey=radio=>String(radio.value||'').toLowerCase();
+  const saveEdits=()=>localStorage.setItem(storageKey,JSON.stringify(edits));
+  const toolbar=document.createElement('div');
+  toolbar.className='catalog-admin-toolbar';
+  toolbar.innerHTML='<strong>Edición de catálogo · '+make+' '+model+' '+year+'</strong><button type="button" class="primary" data-toggle-edit>Activar edición</button><button type="button" data-export>Exportar cambios</button><button type="button" data-import>Importar cambios</button><input type="file" accept="application/json,.json" hidden><small>Los cambios se guardan en este navegador. Exporta una copia para conservarlos o pasarlos a otro dispositivo.</small>';
+  layout.parentNode.insertBefore(toolbar,layout);
+  const modal=document.createElement('div');
+  modal.className='catalog-edit-modal';
+  modal.innerHTML='<section class="catalog-edit-panel" role="dialog" aria-modal="true" aria-labelledby="catalogEditTitle"><button type="button" class="catalog-edit-close" aria-label="Cerrar">×</button><h2 id="catalogEditTitle">Editar repuesto</h2><p>Los cambios aplican a '+make+' '+model+' '+year+' en este navegador.</p><form class="catalog-edit-form"><label>Nombre del repuesto<input name="name" required maxlength="100"></label><label>Imagen (URL https o ruta assets/)<input name="image" type="text" inputmode="url" placeholder="https://… o assets/imagen.jpg"></label><label class="wide">Descripción<textarea name="description" maxlength="600"></textarea></label><label>Precio original / OE<input name="original" type="number" min="0" step="1000"></label><label>Precio premium<input name="premium" type="number" min="0" step="1000"></label><label>Precio económico<input name="economica" type="number" min="0" step="1000"></label><div class="catalog-edit-status" role="status" aria-live="polite"></div><div class="catalog-edit-actions"><button type="submit" class="btn btn-red">Guardar cambios</button><button type="button" class="btn" data-reset>Restablecer</button></div></form></section>';
+  document.body.appendChild(modal);
+  const form=modal.querySelector('form'),closeModal=()=>{modal.classList.remove('open');activeCard=null};
+  const priceFor=(card,key)=>Number(card.querySelector('.vehicle-tier input[value="'+key+'"]')?.dataset.price||0);
+  const currentValues=card=>({name:card.querySelector('h3')?.textContent||'',description:card.querySelector('.vehicle-product-desc')?.textContent||'',image:card.querySelector('.product-image img')?.getAttribute('src')||'',prices:Object.fromEntries(['original','premium','economica'].map(key=>[key,priceFor(card,key)]))});
+  const updateWhatsApp=card=>{const title=card.querySelector('h3')?.textContent||'',radio=card.querySelector('.vehicle-tier input:checked'),link=card.querySelector('.whatsapp-product');if(!radio||!link)return;const amount=Number(radio.dataset.price||0),label=radio.dataset.label||radio.value;link.href='https://wa.me/573197677033?text='+encodeURIComponent('Hola, cotizo '+title+' ('+label+') para '+make+' '+model+' '+year+'. Precio de referencia: '+money.format(amount)+'. Favor confirmar disponibilidad y compatibilidad por VIN.');link.textContent='Cotizar '+label+' por WhatsApp ↗'};
+  const applyValues=(card,value)=>{
+    if(!card.__catalogDefaults)card.__catalogDefaults=currentValues(card);
+    if(value.name)card.querySelector('h3').textContent=value.name;
+    if(value.description)card.querySelector('.vehicle-product-desc').textContent=value.description;
+    if(value.image&&(/^(https:\/\/|assets\/)/i).test(value.image)){const img=card.querySelector('.product-image img');img.src=value.image;img.alt='Imagen de '+(value.name||card.querySelector('h3').textContent)}
+    for(const [key,amount] of Object.entries(value.prices||{})){const radio=card.querySelector('.vehicle-tier input[value="'+key+'"]');if(radio&&Number.isFinite(Number(amount))&&Number(amount)>=0){radio.dataset.price=String(Number(amount));const row=radio.closest('.vehicle-tier');row.querySelector('em').textContent=money.format(Number(amount))}}
+    const selected=card.querySelector('.vehicle-tier input:checked'),current=card.querySelector('.price');
+    if(selected&&current){current.textContent=money.format(Number(selected.dataset.price||0));card.dataset.price=selected.dataset.price;card.dataset.sku=selected.dataset.sku||card.dataset.sku}
+    const add=card.querySelector('.add');if(add)add.setAttribute('aria-label','Agregar '+(value.name||card.querySelector('h3').textContent)+' al carrito');
+    updateWhatsApp(card);
+  };
+  host.querySelectorAll('.vehicle-system-card').forEach(card=>{
+    card.__catalogDefaults=currentValues(card);
+    const key=editKey(card);
+    if(edits[key])applyValues(card,edits[key]);
+    const button=document.createElement('button');button.type='button';button.className='catalog-edit-card';button.textContent='Editar este repuesto';button.addEventListener('click',()=>openEditor(card));card.querySelector('.product-info').appendChild(button);
+  });
+  function openEditor(card){
+    activeCard=card;const value=currentValues(card);
+    form.elements.name.value=value.name;form.elements.description.value=value.description;form.elements.image.value=/^https:\/\//i.test(value.image)?value.image:'';
+    for(const key of ['original','premium','economica'])form.elements[key].value=value.prices[key]||0;
+    form.querySelector('.catalog-edit-status').textContent='';
+    modal.classList.add('open');form.elements.name.focus();
+  }
+  toolbar.querySelector('[data-toggle-edit]').addEventListener('click',event=>{
+    editing=!editing;toolbar.dataset.editing=String(editing);event.currentTarget.textContent=editing?'Terminar edición':'Activar edición';
+  });
+  toolbar.querySelector('[data-export]').addEventListener('click',()=>{
+    const current=Object.fromEntries(Object.entries(edits).filter(([key])=>key.startsWith(scope)));
+    const blob=new Blob([JSON.stringify(current,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='catalogo-'+make+'-'+model+'-'+year+'-ediciones.json';a.click();URL.revokeObjectURL(url);
+  });
+  const fileInput=toolbar.querySelector('input[type=file]');
+  toolbar.querySelector('[data-import]').addEventListener('click',()=>fileInput.click());
+  fileInput.addEventListener('change',async()=>{
+    const file=fileInput.files?.[0];if(!file)return;
+    try{const data=JSON.parse(await file.text());for(const [key,value] of Object.entries(data))if(key.startsWith(scope)&&value&&typeof value==='object')edits[key]=value;saveEdits();host.querySelectorAll('.vehicle-system-card').forEach(card=>{if(edits[editKey(card)])applyValues(card,edits[editKey(card)])});fileInput.value=''}
+    catch{alert('No se pudo importar el archivo JSON.')}
+  });
+  form.addEventListener('submit',event=>{
+    event.preventDefault();if(!activeCard)return;
+    const image=form.elements.image.value.trim();
+    if(image&& !(/^(https:\/\/|assets\/)/i).test(image)){form.querySelector('.catalog-edit-status').textContent='Usa una URL segura https:// o una imagen dentro de assets/.';return}
+    const value={name:form.elements.name.value.trim(),description:form.elements.description.value.trim(),image,prices:{original:Number(form.elements.original.value),premium:Number(form.elements.premium.value),economica:Number(form.elements.economica.value)}};
+    const key=editKey(activeCard);edits[key]=value;saveEdits();applyValues(activeCard,value);form.querySelector('.catalog-edit-status').textContent='Cambios guardados en este navegador.';setTimeout(closeModal,700);
+  });
+  form.querySelector('[data-reset]').addEventListener('click',()=>{
+    if(!activeCard)return;delete edits[editKey(activeCard)];saveEdits();applyValues(activeCard,activeCard.__catalogDefaults);closeModal();
+  });
+  modal.querySelector('.catalog-edit-close').addEventListener('click',closeModal);
+  modal.addEventListener('click',event=>{if(event.target===modal)closeModal()});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&modal.classList.contains('open'))closeModal()});
+  host.addEventListener('change',event=>{if(event.target.matches('.vehicle-tier input[type=radio]'))updateWhatsApp(event.target.closest('.vehicle-system-card'))});
 })();
 </script>
 </body>
