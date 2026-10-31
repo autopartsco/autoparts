@@ -269,6 +269,8 @@ const cart=new Map();const notice=document.getElementById('notice');const money=
       const vehicleMakeLogo = document.createElement('img');
       vehicleMakeLogo.alt = 'Logo de ' + makeName;
       vehicleMakeLogo.src = logoUrl;
+      vehicleMakeMark.classList.add('vehicle-make-mark-fallback');
+      vehicleMakeLogo.onload = () => vehicleMakeMark.classList.remove('vehicle-make-mark-fallback');
       vehicleMakeLogo.onerror = () => {
         vehicleMakeLogo.remove();
         vehicleMakeMark.classList.add('vehicle-make-mark-fallback');
@@ -520,6 +522,27 @@ html,body{max-width:100%;overflow-x:hidden}
 .vehicle-tier{grid-template-columns:12px minmax(0,1fr);font-size:8px}
 .vehicle-tier em{grid-column:2;font-size:9px}
 .vehicle-system-card .product-image{min-height:140px}
+}
+
+/* En móvil, el distintivo de marca tiene espacio propio y el botón de volver baja a una segunda fila. */
+@media(max-width:600px){
+#isolatedPage .nav .wrap{display:grid;grid-template-columns:minmax(0,1fr) auto auto;grid-template-areas:"brand make cart" "back back back";align-items:center;gap:8px 10px;padding:10px 14px}
+#isolatedPage .nav .wrap>.brand{grid-area:brand;min-width:0;width:100%;flex:initial;gap:7px}
+#isolatedPage .nav .wrap>.vehicle-make-mark{grid-area:make;justify-self:end;width:clamp(68px,24vw,104px);min-width:0;max-width:104px;height:42px;padding:3px 6px}
+#isolatedPage .nav .wrap>.vehicle-make-mark img{max-width:100%;max-height:34px}
+#isolatedPage .nav .wrap>.vehicle-make-mark.vehicle-make-mark-fallback{width:clamp(76px,27vw,112px);max-width:112px;padding:3px 6px}
+#isolatedPage .nav .wrap>.vehicle-make-mark .vehicle-make-name{font-size:clamp(9px,2.8vw,11px);line-height:1.1;overflow-wrap:anywhere}
+#isolatedPage .nav .wrap>.cart{grid-area:cart;justify-self:end;margin:0 8px 0 0}
+#isolatedPage .nav .wrap>.btn{grid-area:back;justify-self:stretch;width:100%;min-height:40px;padding:9px 12px;font-size:12px}
+#isolatedPage .brand img{width:58px;height:34px}
+#isolatedPage .brand span{font-size:15px;letter-spacing:.04em}
+}
+@media(max-width:360px){
+#isolatedPage .nav .wrap{grid-template-columns:minmax(0,1fr) 76px 32px;gap:7px}
+#isolatedPage .nav .wrap>.vehicle-make-mark,#isolatedPage .nav .wrap>.vehicle-make-mark.vehicle-make-mark-fallback{width:76px;padding:2px 4px}
+#isolatedPage .nav .wrap>.vehicle-make-mark .vehicle-make-name{font-size:9px}
+#isolatedPage .brand img{width:52px;height:31px}
+#isolatedPage .brand span{font-size:14px}
 }
 </style></body>
 </html>
