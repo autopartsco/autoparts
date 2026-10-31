@@ -260,6 +260,7 @@ const cart=new Map();const notice=document.getElementById('notice');const money=
         Renault: 'https://upload.wikimedia.org/wikipedia/commons/b/b7/Renault_2021_Text.svg',
         Ford: 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Ford-Logo-Vector.svg',
         Chery: 'https://upload.wikimedia.org/wikipedia/commons/b/b6/Chery_logo.svg',
+        Foton: 'https://upload.wikimedia.org/wikipedia/commons/f/fa/Foton_Motor_logo.svg',
         Peugeot: 'https://cdn.simpleicons.org/peugeot/111111', Toyota:'https://cdn.simpleicons.org/toyota/111111', Nissan:'https://cdn.simpleicons.org/nissan/111111', Suzuki:'https://cdn.simpleicons.org/suzuki/111111', Volkswagen:'https://cdn.simpleicons.org/volkswagen/111111', Hyundai:'https://cdn.simpleicons.org/hyundai/111111', Kia:'https://cdn.simpleicons.org/kia/111111', BYD:'https://cdn.simpleicons.org/byd/111111', Honda:'https://cdn.simpleicons.org/honda/111111', BMW:'https://cdn.simpleicons.org/bmw/111111', Audi:'https://cdn.simpleicons.org/audi/111111', Jeep:'https://cdn.simpleicons.org/jeep/111111', Fiat:'https://cdn.simpleicons.org/fiat/111111', Volvo:'https://cdn.simpleicons.org/volvo/111111', Porsche:'https://cdn.simpleicons.org/porsche/111111', Mitsubishi:'https://cdn.simpleicons.org/mitsubishi/111111', 'Citroën':'https://cdn.simpleicons.org/citroen/111111'
       };
       const vehicleMakeName = document.createElement('span');
@@ -267,14 +268,18 @@ const cart=new Map();const notice=document.getElementById('notice');const money=
       vehicleMakeName.textContent = makeName;
       const logoUrl = logoSources[makeName] || 'https://cdn.simpleicons.org/' + makeName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '') + '/111111';
       const vehicleMakeLogo = document.createElement('img');
+      const initials = makeName.trim().split(/\s+/).map(word => word.replace(/[^A-Za-z0-9]/g, '').charAt(0)).filter(Boolean).join('').slice(0, 2).toUpperCase() || 'AP';
+      const fallbackSvg = '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="10" fill="#f5f6f7"/><path d="M8 33 24 9h32L40 33l16 22H24z" fill="#e51d2a"/><text x="34" y="41" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="800" fill="#fff">' + initials + '</text></svg>';
+      const fallbackUrl = 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(fallbackSvg);
       vehicleMakeLogo.alt = 'Logo de ' + makeName;
-      vehicleMakeLogo.src = logoUrl;
       vehicleMakeMark.classList.add('vehicle-make-mark-fallback');
-      vehicleMakeLogo.onload = () => vehicleMakeMark.classList.remove('vehicle-make-mark-fallback');
+      vehicleMakeLogo.onload = () => { if (vehicleMakeLogo.dataset.fallback !== 'true') vehicleMakeMark.classList.remove('vehicle-make-mark-fallback'); };
       vehicleMakeLogo.onerror = () => {
-        vehicleMakeLogo.remove();
-        vehicleMakeMark.classList.add('vehicle-make-mark-fallback');
+        if (vehicleMakeLogo.dataset.fallback === 'true') return;
+        vehicleMakeLogo.dataset.fallback = 'true';
+        vehicleMakeLogo.src = fallbackUrl;
       };
+      vehicleMakeLogo.src = logoUrl;
       vehicleMakeMark.append(vehicleMakeLogo, vehicleMakeName);
       wrap.append(brand, vehicleMakeMark, cartButton, back);
     } else {
